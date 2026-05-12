@@ -27,3 +27,16 @@
 
 # Dotenv and similar local-only files
 *.local
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Next.js build output
+.next/
+out/
+build/
+
+# Vercel
+.vercel

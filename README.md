@@ -1,11 +1,135 @@
-# Sanity Blogging Content Studio
+# Centralized Blog CMS
 
-Congratulations, you have now installed the Sanity Content Studio, an open-source real-time content editing environment connected to the Sanity backend.
+One local CMS for:
 
-Now you can do the following things:
+- `bhadrik-panchal`
+- `nexavvy`
+- `growth-catalyst`
 
-- [Read “getting started” in the docs](https://www.sanity.io/docs/introduction/getting-started?utm_source=readme)
-- Check out the example frontend: [React/Next.js](https://github.com/sanity-io/tutorial-sanity-blog-react-next)
-- [Read the blog post about this template](https://www.sanity.io/blog/build-your-own-blog-with-sanity-and-next-js?utm_source=readme)
-- [Join the Sanity community](https://www.sanity.io/community/join?utm_source=readme)
-- [Extend and build plugins](https://www.sanity.io/docs/content-studio/extending?utm_source=readme)
+It provides:
+
+- secure admin login with signed session cookies
+- one dashboard for all sites
+- blog CRUD
+- local image uploads
+- MongoDB-backed storage
+- public REST API for live frontend fetching
+- SEO fields per post
+- Sanity migration for the Bhadrik site
+
+## Local setup
+
+1. Install dependencies:
+
+```bash
+npm install
+```
+
+2. Copy envs:
+
+```bash
+cp .env.example .env.local
+```
+
+3. Generate a password hash:
+
+```bash
+npm run hash-password -- "your-password"
+```
+
+4. Put that hash into `ADMIN_PASSWORD_HASH`, set `ADMIN_EMAIL`, and add a long `SESSION_SECRET`.
+
+5. Start MongoDB locally and update `MONGODB_URI` if needed.
+
+6. Start the CMS:
+
+```bash
+npm run dev
+```
+
+7. Open `http://localhost:3000/login`.
+
+## Public API
+
+- `GET /api/posts?siteId=bhadrik-panchal`
+- `GET /api/posts?siteId=nexavvy`
+- `GET /api/posts?siteId=growth-catalyst`
+- `GET /api/posts/slug/:siteId/:slug`
+
+Admin-only:
+
+- `POST /api/posts`
+- `PUT /api/posts/:id`
+- `DELETE /api/posts/:id`
+- `POST /api/upload`
+
+## Data model
+
+Each post supports:
+
+- `siteId`
+- `status`
+- `title`
+- `slug`
+- `description`
+- `excerpt`
+- `category`
+- `tags`
+- `author`
+- `publishedAt`
+- `featuredImage`
+- `contentMode`
+- `contentHtml`
+- `portableText`
+- `structuredContent`
+- `seo`
+
+`contentMode` allows one CMS to serve multiple frontends without redesigning their article layouts:
+
+- `html`
+- `portableText`
+- `nexavvyStructured`
+
+## Sanity migration
+
+Bhadrik’s existing Sanity posts can be imported with:
+
+```bash
+npm run migrate:sanity
+```
+
+That script preserves slug, image, publish date, SEO keywords, and Portable Text body blocks.
+
+## Frontend integration notes
+
+### Bhadrik Panchal
+
+- replace Sanity client fetching with `GET /api/posts?siteId=bhadrik-panchal`
+- replace per-slug fetch with `GET /api/posts/slug/bhadrik-panchal/:slug`
+- keep existing layout and animation wrappers intact
+- render `portableText` when available
+
+### FT Nexavvy
+
+- replace `blogs.js` reads and existing localhost fetches with CMS API data
+- continue using the same `Populararticlesection`, `bloglist`, `strategy`, and `relatedblog` components
+- use `structuredContent`, `quote`, `authorImage`, and `authorBio` to preserve current detail page composition
+
+### Keadigi
+
+- point existing `Blog.tsx` and `BlogPost.tsx` to the CMS base URL from env instead of hardcoding `localhost:3004`
+- keep card/detail markup unchanged
+- continue rendering `contentHtml`
+
+## Deployment
+
+1. Deploy the CMS on a persistent Node host or VPS.
+2. Provide a production MongoDB URI.
+3. Set `NEXT_PUBLIC_CMS_URL` to the public CMS domain.
+4. Configure `BHADRIK_SITE_URL`, `NEXAVVY_SITE_URL`, and `KEADIGI_SITE_URL`.
+5. Point each frontend to the live CMS API.
+6. Ensure CORS allows their domains if you later tighten it from `*`.
+
+## Current limitation
+
+The three frontend projects live outside this writable workspace root, so they still need to be patched in their own directories to complete the integration step.
