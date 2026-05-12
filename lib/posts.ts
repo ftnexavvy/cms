@@ -102,6 +102,16 @@ export function normalizePostPayload(input: AnyRecord) {
   };
 }
 
+const CMS_URL = (process.env.NEXT_PUBLIC_CMS_URL || "").replace(/\/$/, "");
+
+function ensureAbsoluteUrl(url: string | undefined | null) {
+  if (!url) return "";
+  if (url.startsWith("/")) {
+    return `${CMS_URL}${url}`;
+  }
+  return url;
+}
+
 export function serializePost(post: AnyRecord) {
   const publishedAt = post.publishedAt instanceof Date
     ? post.publishedAt.toISOString()
@@ -124,11 +134,17 @@ export function serializePost(post: AnyRecord) {
     date: publishedAt,
     publishedAt,
     updatedAt: post.updatedAt ? new Date(post.updatedAt).toISOString() : publishedAt,
-    image: post.featuredImage?.url || "",
-    mainImage: post.featuredImage?.url
-      ? { url: post.featuredImage.url, alt: post.featuredImage.alt || post.title }
+    image: ensureAbsoluteUrl(post.featuredImage?.url || post.image || ""),
+    mainImage: (post.featuredImage?.url || post.image)
+      ? { 
+          url: ensureAbsoluteUrl(post.featuredImage?.url || post.image), 
+          alt: post.featuredImage?.alt || post.title 
+        }
       : null,
-    featuredImage: post.featuredImage || { url: "", alt: "" },
+    featuredImage: {
+      url: ensureAbsoluteUrl(post.featuredImage?.url || ""),
+      alt: post.featuredImage?.alt || ""
+    },
     author: {
       name: post.author?.name || "",
       image: post.author?.image || "",

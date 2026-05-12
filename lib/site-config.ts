@@ -7,7 +7,7 @@ export const SITES = [
     name: "Bhadrik Panchal Website",
     publicBaseUrlEnv: "BHADRIK_SITE_URL",
     blogIndexPath: "/insights",
-    blogPostPath: (slug: string) => `/insights/post?slug=${slug}`,
+    blogPostPath: (slug: string) => `/insights/${slug}`,
     localProjectPath: "/Users/ftnexavvy/Desktop/black and white",
     defaultContentMode: "html" satisfies SiteContentMode,
     contentGuidance:
