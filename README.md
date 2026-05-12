@@ -130,6 +130,31 @@ That script preserves slug, image, publish date, SEO keywords, and Portable Text
 5. Point each frontend to the live CMS API.
 6. Ensure CORS allows their domains if you later tighten it from `*`.
 
+## Deployment (Vercel)
+
+1. **Push to GitHub**: This project is now connected to `https://github.com/ftnexavvy/cms.git`.
+2. **Import to Vercel**:
+   - Go to [vercel.com/new](https://vercel.com/new).
+   - Import the `cms` repository.
+3. **Environment Variables**: Set the following in Vercel project settings:
+   - `MONGODB_URI`: Your MongoDB Atlas connection string.
+   - `SESSION_SECRET`: A long random string for session encryption.
+   - `ADMIN_EMAIL`: Your admin email.
+   - `ADMIN_PASSWORD_HASH`: Use `npm run hash-password` locally to generate this.
+   - `NEXT_PUBLIC_CMS_URL`: The production URL provided by Vercel (e.g., `https://your-cms.vercel.app`).
+4. **Build & Deploy**: Vercel will automatically detect Next.js and deploy.
+
+### Important: Image Uploads
+Since Vercel's filesystem is ephemeral (read-only), local image uploads to `public/uploads` will not persist across deployments or server restarts. 
+**Recommended**: Integrate a cloud storage provider like **Vercel Blob** or **Cloudinary**. 
+
+## Current status
+
+- Pushed to: `https://github.com/ftnexavvy/cms.git`
+- Framework: Next.js 15
+- Database: MongoDB
+- Auth: Custom session-based (JWT-less)
+
 ## Current limitation
 
 The three frontend projects live outside this writable workspace root, so they still need to be patched in their own directories to complete the integration step.
