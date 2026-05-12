@@ -414,10 +414,10 @@ export default function Dashboard() {
                       >
                         {post.publishedAt
                           ? new Date(post.publishedAt).toLocaleDateString("en-US", {
-                              month: "short",
-                              day: "numeric",
-                              year: "numeric",
-                            })
+                            month: "short",
+                            day: "numeric",
+                            year: "numeric",
+                          })
                           : "—"}
                       </span>
                     </td>
