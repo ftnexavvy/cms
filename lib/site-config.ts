@@ -30,7 +30,7 @@ export const SITES = [
     publicBaseUrlEnv: "KEADIGI_SITE_URL",
     blogIndexPath: "/blog",
     blogPostPath: (slug: string) => `/blog/${slug}`,
-    localProjectPath: "/Users/ftnexavvy/Desktop/main keadigi/growth",
+    localProjectPath: "/Users/ftnexavvy/Desktop/main keadigi/growth-catalyst",
     defaultContentMode: "html" satisfies SiteContentMode,
     contentGuidance: "Publish HTML body content. Listings use /blog; each post opens at /blog/[slug].",
   },

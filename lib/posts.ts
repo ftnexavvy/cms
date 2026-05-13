@@ -165,7 +165,7 @@ export function serializePost(post: AnyRecord) {
             }))
           }
         : post.contentHtml || "",
-    body: post.portableText || [],
+    body: post.contentMode === "html" ? (post.contentHtml || "") : (post.portableText || []),
     portableText: post.portableText || [],
     structuredContent: post.structuredContent || { intro: [], strategies: [] },
     seo: {
