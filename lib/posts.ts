@@ -157,7 +157,13 @@ export function serializePost(post: AnyRecord) {
     contentHtml: post.contentHtml || "",
     content:
       post.contentMode === "nexavvyStructured"
-        ? post.structuredContent || { intro: [], strategies: [] }
+        ? {
+            ...post.structuredContent,
+            strategies: (post.structuredContent?.strategies || []).map((s: any) => ({
+              ...s,
+              image: ensureAbsoluteUrl(s.image)
+            }))
+          }
         : post.contentHtml || "",
     body: post.portableText || [],
     portableText: post.portableText || [],
