@@ -195,6 +195,11 @@ export default function PostEditor({ mode, postId, defaultSiteId }: PostEditorPr
     image: "",
     imageAlt: "",
     publishedAt: new Date().toISOString().slice(0, 16),
+    authorName: "",
+    authorImage: "",
+    authorBio: "",
+    quoteText: "",
+    quoteAuthor: "",
     contentMode: getDefaultContentModeForSite(initialSiteId),
     contentHtml: "",
     portableTextJson: emptyPortableTextJson,
@@ -220,6 +225,11 @@ export default function PostEditor({ mode, postId, defaultSiteId }: PostEditorPr
           readTime: data.readTime || "",
           image: data.featuredImage?.url || "",
           imageAlt: data.featuredImage?.alt || "",
+          authorName: data.author?.name || "",
+          authorImage: data.author?.image || "",
+          authorBio: data.author?.bio || "",
+          quoteText: data.quote?.text || "",
+          quoteAuthor: data.quote?.author || "",
           publishedAt: data.publishedAt
             ? new Date(data.publishedAt).toISOString().slice(0, 16)
             : "",
@@ -296,6 +306,15 @@ export default function PostEditor({ mode, postId, defaultSiteId }: PostEditorPr
         readTime: form.readTime,
         featuredImage: { url: form.image, alt: form.imageAlt },
         publishedAt: form.publishedAt,
+        author: {
+          name: form.authorName,
+          image: form.authorImage,
+          bio: form.authorBio,
+        },
+        quote: {
+          text: form.quoteText,
+          author: form.quoteAuthor,
+        },
         contentMode: form.contentMode,
         contentHtml: form.contentHtml,
         portableText: JSON.parse(form.portableTextJson || "[]"),
@@ -691,8 +710,58 @@ export default function PostEditor({ mode, postId, defaultSiteId }: PostEditorPr
               </div>
             </div>
           </Section>
+          {/* ── 4. Author & Quote (Nexavvy) ── */}
+          <Section title="Author & Quote" icon={PenLine}>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+                <Field label="Author Name">
+                  <input
+                    value={form.authorName}
+                    onChange={(e) => update("authorName", e.target.value)}
+                    className="form-input"
+                    placeholder="Bhadrik Panchal"
+                  />
+                </Field>
+                <Field label="Author Designation / Bio">
+                  <input
+                    value={form.authorBio}
+                    onChange={(e) => update("authorBio", e.target.value)}
+                    className="form-input"
+                    placeholder="Founder & CEO"
+                  />
+                </Field>
+                <Field label="Author Image URL">
+                  <input
+                    value={form.authorImage}
+                    onChange={(e) => update("authorImage", e.target.value)}
+                    className="form-input"
+                    placeholder="/uploads/author.png"
+                  />
+                </Field>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+                <Field label="Quote Text">
+                  <textarea
+                    value={form.quoteText}
+                    onChange={(e) => update("quoteText", e.target.value)}
+                    className="form-textarea"
+                    placeholder="Wisdom is not a product of schooling but of the lifelong attempt to acquire it."
+                    style={{ minHeight: 80 }}
+                  />
+                </Field>
+                <Field label="Quote Author">
+                  <input
+                    value={form.quoteAuthor}
+                    onChange={(e) => update("quoteAuthor", e.target.value)}
+                    className="form-input"
+                    placeholder="Albert Einstein"
+                  />
+                </Field>
+              </div>
+            </div>
+          </Section>
 
-          {/* ── 4. Content Body ── */}
+          {/* ── 5. Content Body ── */}
           <Section title="Content Body" icon={Code2}>
             <div style={{ marginBottom: 16 }}>
               <label className="form-label">Content Mode</label>
@@ -728,6 +797,29 @@ export default function PostEditor({ mode, postId, defaultSiteId }: PostEditorPr
                       : form.structuredContentJson.length}{" "}
                   chars
                 </span>
+                {form.contentMode === "nexavvyStructured" && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (confirm("Replace content with template?")) {
+                        update("structuredContentJson", JSON.stringify({
+                          intro: ["First introductory paragraph here.", "Second introductory paragraph."],
+                          strategies: [
+                            {
+                              title: "Strategy One",
+                              paragraphs: ["Details about strategy one.", "More details..."],
+                              image: "/uploads/placeholder.png"
+                            }
+                          ]
+                        }, null, 2));
+                      }
+                    }}
+                    className="btn btn-secondary"
+                    style={{ marginLeft: "auto", padding: "4px 8px", fontSize: 10 }}
+                  >
+                    Load Template
+                  </button>
+                )}
               </div>
 
               {form.contentMode === "html" && (
