@@ -3,6 +3,7 @@ import path from "path";
 import { randomUUID } from "crypto";
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
+import { put } from "@vercel/blob";
 
 export async function POST(request: Request) {
   try {
@@ -18,22 +19,37 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "No file provided" }, { status: 400 });
     }
 
-    const bytes = await file.arrayBuffer();
-    const buffer = Buffer.from(bytes);
     const extension = path.extname(file.name || "") || ".png";
     const filename = `${randomUUID()}${extension}`;
+
+    // ── Vercel Blob (Production) ──
+    if (process.env.VERCEL_BLOB_READ_WRITE_TOKEN) {
+      const blob = await put(`uploads/${filename}`, file, {
+        access: 'public',
+      });
+      return NextResponse.json({
+        url: blob.url,
+        absoluteUrl: blob.url,
+      });
+    }
+
+    // ── Local Filesystem (Development fallback) ──
+    // Note: This will not work reliably on Vercel production
+    const bytes = await file.arrayBuffer();
+    const buffer = Buffer.from(bytes);
     const uploadDir = path.join(process.cwd(), "public", "uploads");
 
     await mkdir(uploadDir, { recursive: true });
     await writeFile(path.join(uploadDir, filename), buffer);
 
+    const baseUrl = (process.env.NEXT_PUBLIC_CMS_URL || "").replace(/\/$/, "");
+
     return NextResponse.json({
       url: `/uploads/${filename}`,
-      absoluteUrl: process.env.NEXT_PUBLIC_CMS_URL
-        ? `${process.env.NEXT_PUBLIC_CMS_URL.replace(/\/$/, "")}/uploads/${filename}`
-        : "",
+      absoluteUrl: baseUrl ? `${baseUrl}/uploads/${filename}` : `/uploads/${filename}`,
     });
   } catch (error: any) {
+    console.error("Upload error:", error);
     return NextResponse.json({ error: error.message || "Upload failed" }, { status: 500 });
   }
 }
