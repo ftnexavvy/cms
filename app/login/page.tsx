@@ -4,11 +4,8 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowRight, Globe2, Loader2, Lock, ShieldCheck, Zap } from "lucide-react";
 
-const SITES = [
-  "Bhadrik Panchal Website",
-  "FT Nexavvy Website",
-  "Keadigi Website",
-];
+const SITES_REMOVED = true;
+
 
 export default function LoginPage() {
   const router = useRouter();
@@ -190,52 +187,8 @@ export default function LoginPage() {
             </p>
           </div>
 
-          {/* Site list */}
-          <div style={{ position: "relative" }}>
-            <p
-              style={{
-                fontSize: 10,
-                fontWeight: 700,
-                letterSpacing: "0.12em",
-                textTransform: "uppercase",
-                color: "var(--text-faint)",
-                marginBottom: 14,
-              }}
-            >
-              Connected Sites
-            </p>
-            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              {SITES.map((site) => (
-                <div
-                  key={site}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 10,
-                    padding: "10px 14px",
-                    background: "rgba(255,255,255,0.03)",
-                    border: "1px solid var(--border-subtle)",
-                    borderRadius: 10,
-                  }}
-                >
-                  <Globe2 size={13} color="var(--text-muted)" />
-                  <span style={{ fontSize: 13, color: "var(--text-secondary)" }}>
-                    {site}
-                  </span>
-                  <div
-                    style={{
-                      marginLeft: "auto",
-                      width: 6,
-                      height: 6,
-                      borderRadius: "50%",
-                      background: "var(--status-live-text)",
-                      boxShadow: "0 0 8px var(--status-live-text)",
-                    }}
-                  />
-                </div>
-              ))}
-            </div>
-          </div>
+{/* Sites list removed for security */}
+
         </div>
 
         {/* ── Right panel (form) ── */}
