@@ -23,9 +23,13 @@ export async function POST(request: Request) {
     const filename = `${randomUUID()}${extension}`;
 
     // ── Vercel Blob (Production) ──
-    if (process.env.VERCEL_BLOB_READ_WRITE_TOKEN) {
+    console.log("Checking Vercel Blob Token...");
+    const token = process.env.VERCEL_BLOB_READ_WRITE_TOKEN || process.env.BLOB_READ_WRITE_TOKEN;
+    if (token) {
+      console.log("Vercel Blob Token found, uploading...");
       const blob = await put(`uploads/${filename}`, file, {
         access: 'public',
+        token: token,
       });
       return NextResponse.json({
         url: blob.url,
