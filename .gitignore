@@ -17,6 +17,7 @@
 
 # Coverage directory used by testing tools
 /coverage
+.tmp-phase1-tests/
 
 # Misc
 .DS_Store

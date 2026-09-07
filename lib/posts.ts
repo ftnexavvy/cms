@@ -1,4 +1,13 @@
-import { getDefaultContentModeForSite, getSiteConfig } from "@/lib/site-config";
+import { getDefaultContentModeForSite, getSiteConfig } from "./site-config";
+import {
+  PostPayloadError,
+  normalizeCta,
+  normalizeFaqs,
+  normalizeRelatedSlugs,
+  normalizeStructuredContent,
+} from "./structured-content";
+
+export { PostPayloadError };
 
 type AnyRecord = Record<string, any>;
 
@@ -20,7 +29,22 @@ function inferCanonical(siteId: string, slug: string, fallbackCanonical?: string
   return `${baseUrl.replace(/\/$/, "")}${config.blogPostPath(slug)}`;
 }
 
-export function normalizePostPayload(input: AnyRecord) {
+function structuredContentSource(input: AnyRecord) {
+  if (input.structuredContent && typeof input.structuredContent === "object" && !Array.isArray(input.structuredContent)) {
+    return input.structuredContent;
+  }
+  if (input.content && typeof input.content === "object" && !Array.isArray(input.content)) {
+    return input.content;
+  }
+  return {};
+}
+
+export function isPostPayloadError(error: unknown): error is PostPayloadError {
+  return error instanceof PostPayloadError || (error instanceof Error && error.name === "PostPayloadError");
+}
+
+export function normalizePostPayload(input: AnyRecord, options?: { isUpdate?: boolean }) {
+  const isUpdate = Boolean(options?.isUpdate);
   const featuredImageUrl =
     input.featuredImage?.url || input.image || input.mainImage?.url || "";
   const featuredImageAlt =
@@ -45,7 +69,7 @@ export function normalizePostPayload(input: AnyRecord) {
         ? input.content
         : "";
 
-  return {
+  const payload: AnyRecord = {
     siteId: input.siteId,
     status: input.status || "published",
     title: input.title?.trim(),
@@ -76,18 +100,7 @@ export function normalizePostPayload(input: AnyRecord) {
       : Array.isArray(input.body)
         ? input.body
         : [],
-    structuredContent: {
-      intro: Array.isArray(input.structuredContent?.intro)
-        ? input.structuredContent.intro
-        : Array.isArray(input.content?.intro)
-          ? input.content.intro
-          : [],
-      strategies: Array.isArray(input.structuredContent?.strategies)
-        ? input.structuredContent.strategies
-        : Array.isArray(input.content?.strategies)
-          ? input.content.strategies
-          : [],
-    },
+    structuredContent: normalizeStructuredContent(structuredContentSource(input)),
     seo: {
       metaTitle: input.seo?.metaTitle || input.metaTitle || input.title || "",
       metaDescription:
@@ -100,6 +113,28 @@ export function normalizePostPayload(input: AnyRecord) {
     schemaType: input.schemaType || "BlogPosting",
     legacy: input.legacy || {},
   };
+
+  // Omit article-level fields on update when the existing editor does not send them,
+  // so a PUT from PostEditor cannot wipe FAQs, CTA, or related slugs.
+  if ("faqs" in input || "faq" in input) {
+    payload.faqs = normalizeFaqs(input.faqs ?? input.faq);
+  } else if (!isUpdate) {
+    payload.faqs = [];
+  }
+
+  if ("cta" in input) {
+    payload.cta = normalizeCta(input.cta);
+  } else if (!isUpdate) {
+    payload.cta = { heading: "", body: "", label: "", href: "" };
+  }
+
+  if ("relatedSlugs" in input) {
+    payload.relatedSlugs = normalizeRelatedSlugs(input.relatedSlugs);
+  } else if (!isUpdate) {
+    payload.relatedSlugs = [];
+  }
+
+  return payload;
 }
 
 const CMS_URL = (process.env.NEXT_PUBLIC_CMS_URL || "").replace(/\/$/, "");
@@ -112,12 +147,64 @@ function ensureAbsoluteUrl(url: string | undefined | null) {
   return url;
 }
 
+function serializeBlocks(blocks: unknown) {
+  if (!Array.isArray(blocks)) {
+    return [];
+  }
+
+  return blocks.map((block: AnyRecord) => {
+    if (!block || typeof block !== "object") {
+      return block;
+    }
+    if (block.type === "image") {
+      return {
+        type: "image",
+        url: ensureAbsoluteUrl(block.url),
+        alt: block.alt || "",
+        caption: block.caption || "",
+      };
+    }
+    return block;
+  });
+}
+
+function serializeStructuredContent(structured: AnyRecord | undefined) {
+  return {
+    intro: Array.isArray(structured?.intro) ? structured.intro : [],
+    strategies: Array.isArray(structured?.strategies)
+      ? structured.strategies.map((strategy: AnyRecord) => {
+          const serialized: AnyRecord = {
+            title: strategy.title || "",
+            paragraphs: Array.isArray(strategy.paragraphs) ? strategy.paragraphs : [],
+            blocks: serializeBlocks(strategy.blocks),
+          };
+          // Optional leftover field only if already present on a stored document.
+          // Typed image blocks are the source of truth; do not invent strategy.image.
+          if (typeof strategy.image === "string" && strategy.image) {
+            serialized.image = ensureAbsoluteUrl(strategy.image);
+          }
+          return serialized;
+        })
+      : [],
+  };
+}
+
+function serializeCta(cta: AnyRecord | undefined) {
+  return {
+    heading: cta?.heading || "",
+    body: cta?.body || "",
+    label: cta?.label || "",
+    href: cta?.href || "",
+  };
+}
+
 export function serializePost(post: AnyRecord) {
   const publishedAt = post.publishedAt instanceof Date
     ? post.publishedAt.toISOString()
     : new Date(post.publishedAt).toISOString();
   const description = post.description || post.excerpt || "";
   const excerpt = post.excerpt || description;
+  const structuredContent = serializeStructuredContent(post.structuredContent);
 
   return {
     id: String(post._id),
@@ -157,17 +244,14 @@ export function serializePost(post: AnyRecord) {
     contentHtml: post.contentHtml || "",
     content:
       post.contentMode === "nexavvyStructured"
-        ? {
-            ...post.structuredContent,
-            strategies: (post.structuredContent?.strategies || []).map((s: any) => ({
-              ...s,
-              image: ensureAbsoluteUrl(s.image)
-            }))
-          }
+        ? structuredContent
         : post.contentHtml || "",
     body: post.contentMode === "html" ? (post.contentHtml || "") : (post.portableText || []),
     portableText: post.portableText || [],
-    structuredContent: post.structuredContent || { intro: [], strategies: [] },
+    structuredContent,
+    faqs: Array.isArray(post.faqs) ? post.faqs : [],
+    cta: serializeCta(post.cta),
+    relatedSlugs: Array.isArray(post.relatedSlugs) ? post.relatedSlugs : [],
     seo: {
       metaTitle: post.seo?.metaTitle || post.title,
       metaDescription: post.seo?.metaDescription || excerpt || description,

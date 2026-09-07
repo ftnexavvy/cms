@@ -6,17 +6,37 @@ import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
   Check,
-  ChevronDown,
   Code2,
-  FileText,
   Globe2,
+  HelpCircle,
   Image as ImageIcon,
+  Link2,
   Loader2,
+  Megaphone,
   PenLine,
+  Search,
   UploadCloud,
   X,
 } from "lucide-react";
 import { slugify } from "@/lib/strings";
+import { uploadImageFile } from "@/lib/upload-client";
+import {
+  createEmptyCta,
+  editorArticleFromStructured,
+  faqsFromPayload,
+  ctaFromPayload,
+  relatedSlugsFromPayload,
+  serializeEditorArticle,
+  validateEditorState,
+  type EditorArticle,
+  type EditorFaq,
+  type EditorIssue,
+} from "@/lib/structured-editor";
+import type { CtaItem } from "@/lib/structured-content";
+import { PostPayloadError } from "@/lib/structured-content";
+import StructuredArticleEditor from "@/components/structured-editor/StructuredArticleEditor";
+import { CtaEditor, FaqEditor, RelatedSlugsEditor } from "@/components/structured-editor/ArticleMetaEditors";
+import { STRUCTURED_EDITOR_TEST_FIXTURE } from "@/lib/structured-editor-fixture";
 import {
   getDefaultContentModeForSite,
   getSiteConfig,
@@ -94,12 +114,16 @@ function EditorTopbar({
   status,
   saving,
   siteId,
+  saveLabel,
+  dirty,
 }: {
   isEdit: boolean;
   siteName: string;
   status: string;
   saving: boolean;
   siteId: string;
+  saveLabel: string;
+  dirty: boolean;
 }) {
   return (
     <div className="topbar">
@@ -137,6 +161,9 @@ function EditorTopbar({
       </div>
 
       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        {dirty && (
+          <span style={{ fontSize: 12, color: "var(--text-muted)" }}>Unsaved changes</span>
+        )}
         <span
           className={`badge ${status === "published" ? "badge-live" : "badge-draft"}`}
         >
@@ -162,7 +189,7 @@ function EditorTopbar({
           ) : (
             <Check size={12} />
           )}
-          {isEdit ? "Update" : "Publish"}
+          {saveLabel}
         </button>
       </div>
     </div>
@@ -178,8 +205,11 @@ export default function PostEditor({ mode, postId, defaultSiteId }: PostEditorPr
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState("");
+  const [fieldIssues, setFieldIssues] = useState<EditorIssue[]>([]);
   const [dragOver, setDragOver] = useState(false);
+  const [dirty, setDirty] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const savedSnapshotRef = useRef("");
 
   const prevSiteIdRef = useRef(initialSiteId);
 
@@ -204,7 +234,17 @@ export default function PostEditor({ mode, postId, defaultSiteId }: PostEditorPr
     contentHtml: "",
     portableTextJson: emptyPortableTextJson,
     structuredContentJson: emptyStructuredJson,
+    seoMetaTitle: "",
+    seoMetaDescription: "",
+    seoCanonical: "",
+    seoOgImage: "",
+    seoKeywords: "",
+    seoNoIndex: false,
   });
+  const [article, setArticle] = useState<EditorArticle>({ intro: [], sections: [] });
+  const [faqs, setFaqs] = useState<EditorFaq[]>([]);
+  const [cta, setCta] = useState<CtaItem>(createEmptyCta());
+  const [relatedSlugs, setRelatedSlugs] = useState<string[]>([]);
 
   /* ── Load existing post ── */
   useEffect(() => {
@@ -242,7 +282,22 @@ export default function PostEditor({ mode, postId, defaultSiteId }: PostEditorPr
             null,
             2,
           ),
+          seoMetaTitle: data.seo?.metaTitle || "",
+          seoMetaDescription: data.seo?.metaDescription || "",
+          seoCanonical: data.seo?.canonical || "",
+          seoOgImage: data.seo?.ogImage || "",
+          seoKeywords: Array.isArray(data.seo?.keywords) ? data.seo.keywords.join(", ") : "",
+          seoNoIndex: Boolean(data.seo?.noIndex),
         });
+        const nextArticle = editorArticleFromStructured(data.structuredContent);
+        const nextFaqs = faqsFromPayload(data.faqs);
+        const nextCta = ctaFromPayload(data.cta);
+        const nextRelated = relatedSlugsFromPayload(data.relatedSlugs);
+        setArticle(nextArticle);
+        setFaqs(nextFaqs);
+        setCta(nextCta);
+        setRelatedSlugs(nextRelated);
+        savedSnapshotRef.current = "";
       } catch (err: any) {
         setError(err.message || "Failed to load post");
       } finally {
@@ -267,21 +322,46 @@ export default function PostEditor({ mode, postId, defaultSiteId }: PostEditorPr
     setForm((c) => ({ ...c, contentMode: getDefaultContentModeForSite(form.siteId) }));
   }, [form.siteId, isEdit]);
 
-  function update(field: string, value: string) {
+  function update(field: string, value: string | boolean) {
     setForm((c) => ({ ...c, [field]: value }));
   }
+
+  function currentSnapshot() {
+    return JSON.stringify({
+      form,
+      article,
+      faqs,
+      cta,
+      relatedSlugs,
+    });
+  }
+
+  useEffect(() => {
+    if (loading) return;
+    if (!savedSnapshotRef.current) {
+      savedSnapshotRef.current = currentSnapshot();
+      return;
+    }
+    setDirty(currentSnapshot() !== savedSnapshotRef.current);
+  }, [form, article, faqs, cta, relatedSlugs, loading]);
+
+  useEffect(() => {
+    function onBeforeUnload(event: BeforeUnloadEvent) {
+      if (!dirty) return;
+      event.preventDefault();
+      event.returnValue = "";
+    }
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, [dirty]);
 
   /* ── Image upload ── */
   async function uploadFile(file: File) {
     setUploading(true);
     setError("");
     try {
-      const body = new FormData();
-      body.append("file", file);
-      const res = await fetch("/api/upload", { method: "POST", body });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Upload failed");
-      update("image", data.absoluteUrl || data.url);
+      const uploaded = await uploadImageFile(file);
+      update("image", uploaded.absoluteUrl || uploaded.url);
     } catch (err: any) {
       setError(err.message || "Upload failed");
     } finally {
@@ -292,10 +372,19 @@ export default function PostEditor({ mode, postId, defaultSiteId }: PostEditorPr
   /* ── Submit ── */
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (saving) return;
     setSaving(true);
     setError("");
+    setFieldIssues([]);
     try {
-      const payload = {
+      let portableText = [];
+      try {
+        portableText = JSON.parse(form.portableTextJson || "[]");
+      } catch {
+        throw new Error("Portable Text JSON is invalid.");
+      }
+
+      const payload: Record<string, unknown> = {
         siteId: form.siteId,
         status: form.status,
         title: form.title,
@@ -317,9 +406,35 @@ export default function PostEditor({ mode, postId, defaultSiteId }: PostEditorPr
         },
         contentMode: form.contentMode,
         contentHtml: form.contentHtml,
-        portableText: JSON.parse(form.portableTextJson || "[]"),
-        structuredContent: JSON.parse(form.structuredContentJson || emptyStructuredJson),
+        portableText,
+        seo: {
+          metaTitle: form.seoMetaTitle,
+          metaDescription: form.seoMetaDescription,
+          canonical: form.seoCanonical,
+          ogImage: form.seoOgImage,
+          keywords: form.seoKeywords.split(",").map((item) => item.trim()).filter(Boolean),
+          noIndex: form.seoNoIndex,
+        },
       };
+
+      if (form.contentMode === "nexavvyStructured") {
+        const issues = validateEditorState({ article, faqs, cta, relatedSlugs });
+        if (issues.length) {
+          setFieldIssues(issues);
+          throw new PostPayloadError(issues[0]?.message || "Please fix the highlighted fields.");
+        }
+        payload.structuredContent = serializeEditorArticle(article);
+        payload.faqs = faqs.map((faq) => ({ question: faq.question, answer: faq.answer }));
+        payload.cta = cta;
+        payload.relatedSlugs = relatedSlugs;
+      } else {
+        try {
+          payload.structuredContent = JSON.parse(form.structuredContentJson || emptyStructuredJson);
+        } catch {
+          throw new Error("Structured JSON is invalid.");
+        }
+      }
+
       const res = await fetch(isEdit ? `/api/posts/${postId}` : "/api/posts", {
         method: isEdit ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
@@ -327,10 +442,15 @@ export default function PostEditor({ mode, postId, defaultSiteId }: PostEditorPr
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to save post");
+      savedSnapshotRef.current = currentSnapshot();
+      setDirty(false);
       router.push(`/?siteId=${payload.siteId}`);
       router.refresh();
     } catch (err: any) {
-      setError(err.message || "Failed to save post");
+      const message = err instanceof PostPayloadError || err?.name === "PostPayloadError"
+        ? err.message
+        : err.message || "Failed to save post";
+      setError(message);
     } finally {
       setSaving(false);
     }
@@ -363,8 +483,17 @@ export default function PostEditor({ mode, postId, defaultSiteId }: PostEditorPr
   const contentModeLabels: Record<string, string> = {
     html: "HTML / Rich Text",
     portableText: "Portable Text JSON",
-    nexavvyStructured: "Nexavvy Structured JSON",
+    nexavvyStructured: "Nexavvy Structured",
   };
+
+  const saveLabel =
+    form.status === "draft"
+      ? isEdit
+        ? "Save draft"
+        : "Save as draft"
+      : isEdit
+        ? "Update post"
+        : "Publish post";
 
   return (
     <>
@@ -374,6 +503,8 @@ export default function PostEditor({ mode, postId, defaultSiteId }: PostEditorPr
         status={form.status}
         saving={saving}
         siteId={form.siteId}
+        saveLabel={saveLabel}
+        dirty={dirty}
       />
 
       <div className="admin-content">
@@ -410,9 +541,10 @@ export default function PostEditor({ mode, postId, defaultSiteId }: PostEditorPr
                   value={form.status}
                   onChange={(e) => update("status", e.target.value)}
                   className="form-select"
+                  aria-label="Publication status"
                 >
-                  <option value="published">Published</option>
                   <option value="draft">Draft</option>
+                  <option value="published">Published</option>
                 </select>
               </Field>
 
@@ -540,6 +672,62 @@ export default function PostEditor({ mode, postId, defaultSiteId }: PostEditorPr
             </div>
           </Section>
 
+          <Section title="SEO" icon={Search}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+              <Field label="SEO title">
+                <input
+                  value={form.seoMetaTitle}
+                  onChange={(e) => update("seoMetaTitle", e.target.value)}
+                  className="form-input"
+                  placeholder="Defaults to the post title if empty"
+                />
+              </Field>
+              <Field label="Meta description">
+                <textarea
+                  value={form.seoMetaDescription}
+                  onChange={(e) => update("seoMetaDescription", e.target.value)}
+                  className="form-textarea"
+                  placeholder="Defaults to the excerpt if empty"
+                  style={{ minHeight: 88 }}
+                />
+              </Field>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+                <Field label="Canonical URL">
+                  <input
+                    value={form.seoCanonical}
+                    onChange={(e) => update("seoCanonical", e.target.value)}
+                    className="form-input"
+                    placeholder="Leave blank to auto-generate"
+                  />
+                </Field>
+                <Field label="OG image URL">
+                  <input
+                    value={form.seoOgImage}
+                    onChange={(e) => update("seoOgImage", e.target.value)}
+                    className="form-input"
+                    placeholder="Defaults to the hero image"
+                  />
+                </Field>
+              </div>
+              <Field label="Keywords (comma separated)">
+                <input
+                  value={form.seoKeywords}
+                  onChange={(e) => update("seoKeywords", e.target.value)}
+                  className="form-input"
+                  placeholder="digital marketing, ahmedabad"
+                />
+              </Field>
+              <label style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 13 }}>
+                <input
+                  type="checkbox"
+                  checked={form.seoNoIndex}
+                  onChange={(e) => update("seoNoIndex", e.target.checked)}
+                />
+                No index
+              </label>
+            </div>
+          </Section>
+
           {/* ── 3. Featured Image ── */}
           <Section title="Featured Image" icon={ImageIcon}>
             <div
@@ -574,8 +762,21 @@ export default function PostEditor({ mode, postId, defaultSiteId }: PostEditorPr
                       ) : (
                         <UploadCloud size={13} />
                       )}
-                      Upload
+                      {form.image ? "Replace" : "Upload"}
                     </button>
+                    {form.image && (
+                      <button
+                        type="button"
+                        className="btn btn-ghost"
+                        onClick={() => {
+                          update("image", "");
+                          update("imageAlt", "");
+                        }}
+                      >
+                        <X size={13} />
+                        Remove
+                      </button>
+                    )}
                     <input
                       ref={fileInputRef}
                       type="file"
@@ -773,7 +974,7 @@ export default function PostEditor({ mode, postId, defaultSiteId }: PostEditorPr
               >
                 <option value="html">HTML / Rich Text</option>
                 <option value="portableText">Portable Text JSON</option>
-                <option value="nexavvyStructured">Nexavvy Structured JSON</option>
+                <option value="nexavvyStructured">Nexavvy Structured</option>
               </select>
             </div>
 
@@ -784,41 +985,20 @@ export default function PostEditor({ mode, postId, defaultSiteId }: PostEditorPr
                   alignItems: "center",
                   justifyContent: "space-between",
                   marginBottom: 8,
+                  gap: 8,
+                  flexWrap: "wrap",
                 }}
               >
                 <label className="form-label" style={{ margin: 0 }}>
                   {contentModeLabels[form.contentMode] || "Content"}
                 </label>
-                <span style={{ fontSize: 10, color: "var(--text-faint)" }}>
-                  {form.contentMode === "html"
-                    ? form.contentHtml.length
-                    : form.contentMode === "portableText"
-                      ? form.portableTextJson.length
-                      : form.structuredContentJson.length}{" "}
-                  chars
-                </span>
-                {form.contentMode === "nexavvyStructured" && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (confirm("Replace content with template?")) {
-                        update("structuredContentJson", JSON.stringify({
-                          intro: ["First introductory paragraph here.", "Second introductory paragraph."],
-                          strategies: [
-                            {
-                              title: "Strategy One",
-                              paragraphs: ["Details about strategy one.", "More details..."],
-                              image: "/uploads/placeholder.png"
-                            }
-                          ]
-                        }, null, 2));
-                      }
-                    }}
-                    className="btn btn-secondary"
-                    style={{ marginLeft: "auto", padding: "4px 8px", fontSize: 10 }}
-                  >
-                    Load Template
-                  </button>
+                {form.contentMode !== "nexavvyStructured" && (
+                  <span style={{ fontSize: 10, color: "var(--text-faint)" }}>
+                    {form.contentMode === "html"
+                      ? form.contentHtml.length
+                      : form.portableTextJson.length}{" "}
+                    chars
+                  </span>
                 )}
               </div>
 
@@ -842,15 +1022,93 @@ export default function PostEditor({ mode, postId, defaultSiteId }: PostEditorPr
               )}
 
               {form.contentMode === "nexavvyStructured" && (
-                <textarea
-                  value={form.structuredContentJson}
-                  onChange={(e) => update("structuredContentJson", e.target.value)}
-                  className="form-code"
-                  style={{ height: 400 }}
-                />
+                <div className="se-stack">
+                  <StructuredArticleEditor
+                    article={article}
+                    issues={fieldIssues}
+                    onChange={(next) => {
+                      setArticle(next);
+                      update("structuredContentJson", JSON.stringify(serializeEditorArticle(next), null, 2));
+                    }}
+                  />
+                  <details>
+                    <summary className="form-label" style={{ cursor: "pointer" }}>
+                      Advanced: JSON fallback
+                    </summary>
+                    <div className="se-stack" style={{ marginTop: 12 }}>
+                      <p style={{ fontSize: 12, color: "var(--text-muted)", margin: 0 }}>
+                        Visual editor is the primary interface. Apply JSON only if you need a debug override.
+                      </p>
+                      <textarea
+                        value={form.structuredContentJson}
+                        onChange={(e) => update("structuredContentJson", e.target.value)}
+                        className="form-code"
+                        style={{ height: 220 }}
+                        aria-label="Structured content JSON"
+                      />
+                      <div className="se-add-row">
+                        <button
+                          type="button"
+                          className="btn btn-secondary btn-sm"
+                          onClick={() => {
+                            try {
+                              const parsed = JSON.parse(form.structuredContentJson || emptyStructuredJson);
+                              setArticle(editorArticleFromStructured(parsed));
+                              setError("");
+                            } catch {
+                              setError("Structured JSON is invalid.");
+                            }
+                          }}
+                        >
+                          Apply JSON to editor
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-ghost btn-sm"
+                          onClick={() => {
+                            if (
+                              confirm(
+                                "Load the local test fixture into the editor? This does not save to the database. Save as draft if you continue.",
+                              )
+                            ) {
+                              const nextArticle = STRUCTURED_EDITOR_TEST_FIXTURE.article;
+                              setArticle(nextArticle);
+                              setFaqs(STRUCTURED_EDITOR_TEST_FIXTURE.faqs);
+                              setCta(STRUCTURED_EDITOR_TEST_FIXTURE.cta);
+                              setRelatedSlugs(STRUCTURED_EDITOR_TEST_FIXTURE.relatedSlugs);
+                              update("image", STRUCTURED_EDITOR_TEST_FIXTURE.featuredImage.url);
+                              update("imageAlt", STRUCTURED_EDITOR_TEST_FIXTURE.featuredImage.alt);
+                              update("status", "draft");
+                              update(
+                                "structuredContentJson",
+                                JSON.stringify(serializeEditorArticle(nextArticle), null, 2),
+                              );
+                            }
+                          }}
+                        >
+                          Load test fixture
+                        </button>
+                      </div>
+                    </div>
+                  </details>
+                </div>
               )}
             </div>
           </Section>
+
+          {form.contentMode === "nexavvyStructured" && (
+            <>
+              <Section title="Frequently Asked Questions" icon={HelpCircle}>
+                <FaqEditor faqs={faqs} issues={fieldIssues} onChange={setFaqs} />
+              </Section>
+              <Section title="Call to action" icon={Megaphone}>
+                <CtaEditor cta={cta} issues={fieldIssues} onChange={setCta} />
+              </Section>
+              <Section title="Related articles" icon={Link2}>
+                <RelatedSlugsEditor slugs={relatedSlugs} onChange={setRelatedSlugs} />
+              </Section>
+            </>
+          )}
 
           {/* ── Error ── */}
           {error && (
@@ -881,7 +1139,15 @@ export default function PostEditor({ mode, postId, defaultSiteId }: PostEditorPr
               paddingTop: 8,
             }}
           >
-            <Link href={`/?siteId=${form.siteId}`} className="btn btn-secondary">
+            <Link
+              href={`/?siteId=${form.siteId}`}
+              className="btn btn-secondary"
+              onClick={(event) => {
+                if (dirty && !confirm("Discard unsaved changes?")) {
+                  event.preventDefault();
+                }
+              }}
+            >
               Cancel
             </Link>
             <button
@@ -894,7 +1160,7 @@ export default function PostEditor({ mode, postId, defaultSiteId }: PostEditorPr
               ) : (
                 <Check size={13} />
               )}
-              {isEdit ? "Update Post" : "Publish Post"}
+              {saveLabel}
             </button>
           </div>
         </form>

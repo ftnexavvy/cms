@@ -1,9 +1,31 @@
 import mongoose, { Schema, model, models } from "mongoose";
 
+const ContentBlockSchema = new Schema(
+  {
+    type: {
+      type: String,
+      required: true,
+      enum: ["paragraph", "heading", "list", "image", "table"],
+    },
+    html: { type: String, trim: true },
+    level: { type: Number },
+    text: { type: String, trim: true },
+    ordered: { type: Boolean },
+    items: [{ type: String, trim: true }],
+    url: { type: String, trim: true },
+    alt: { type: String, trim: true },
+    caption: { type: String, trim: true, default: "" },
+    headers: [{ type: String, trim: true }],
+    rows: { type: [Schema.Types.Mixed], default: undefined },
+  },
+  { _id: false },
+);
+
 const StrategySchema = new Schema(
   {
     title: { type: String, trim: true },
     paragraphs: [{ type: String, trim: true }],
+    blocks: { type: [ContentBlockSchema], default: [] },
   },
   { _id: false },
 );
@@ -12,6 +34,24 @@ const StructuredContentSchema = new Schema(
   {
     intro: [{ type: String, trim: true }],
     strategies: [StrategySchema],
+  },
+  { _id: false },
+);
+
+const FaqSchema = new Schema(
+  {
+    question: { type: String, trim: true, required: true },
+    answer: { type: String, trim: true, required: true },
+  },
+  { _id: false },
+);
+
+const CtaSchema = new Schema(
+  {
+    heading: { type: String, trim: true, default: "" },
+    body: { type: String, trim: true, default: "" },
+    label: { type: String, trim: true, default: "" },
+    href: { type: String, trim: true, default: "" },
   },
   { _id: false },
 );
@@ -88,6 +128,9 @@ const PostSchema = new Schema(
     contentHtml: { type: String, default: "" },
     portableText: { type: [Schema.Types.Mixed], default: [] },
     structuredContent: { type: StructuredContentSchema, default: () => ({}) },
+    faqs: { type: [FaqSchema], default: [] },
+    cta: { type: CtaSchema, default: () => ({}) },
+    relatedSlugs: [{ type: String, trim: true }],
     seo: { type: SeoSchema, default: () => ({}) },
     schemaType: { type: String, trim: true, default: "BlogPosting" },
     legacy: {

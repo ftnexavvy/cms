@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import connectDB from "@/lib/mongodb";
 import Post from "@/models/Post";
 import { getSession } from "@/lib/auth";
-import { normalizePostPayload, serializePost } from "@/lib/posts";
+import { isPostPayloadError, normalizePostPayload, serializePost } from "@/lib/posts";
 
 function withCors(response: NextResponse) {
   response.headers.set("Access-Control-Allow-Origin", "*");
@@ -69,6 +69,9 @@ export async function POST(request: Request) {
     const post = await Post.create(payload);
     return NextResponse.json(serializePost(post.toObject()), { status: 201 });
   } catch (error: any) {
+    if (isPostPayloadError(error)) {
+      return NextResponse.json({ error: error.message }, { status: 400 });
+    }
     if (error?.code === 11000) {
       return NextResponse.json(
         { error: "This slug already exists for the selected website." },

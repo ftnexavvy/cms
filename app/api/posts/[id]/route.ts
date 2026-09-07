@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import connectDB from "@/lib/mongodb";
 import Post from "@/models/Post";
 import { getSession } from "@/lib/auth";
-import { normalizePostPayload, serializePost } from "@/lib/posts";
+import { isPostPayloadError, normalizePostPayload, serializePost } from "@/lib/posts";
 
 export async function GET(
   request: Request,
@@ -41,7 +41,7 @@ export async function PUT(
     await connectDB();
     const { id } = await params;
     const body = await request.json();
-    const payload = normalizePostPayload(body);
+    const payload = normalizePostPayload(body, { isUpdate: true });
     const post = await Post.findByIdAndUpdate(id, payload, {
       new: true,
       runValidators: true,
@@ -53,6 +53,9 @@ export async function PUT(
 
     return NextResponse.json(serializePost(post));
   } catch (error: any) {
+    if (isPostPayloadError(error)) {
+      return NextResponse.json({ error: error.message }, { status: 400 });
+    }
     if (error?.code === 11000) {
       return NextResponse.json(
         { error: "This slug already exists for the selected website." },
