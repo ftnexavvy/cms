@@ -36,7 +36,6 @@ import type { CtaItem } from "@/lib/structured-content";
 import { PostPayloadError } from "@/lib/structured-content";
 import StructuredArticleEditor from "@/components/structured-editor/StructuredArticleEditor";
 import { CtaEditor, FaqEditor, RelatedSlugsEditor } from "@/components/structured-editor/ArticleMetaEditors";
-import { STRUCTURED_EDITOR_TEST_FIXTURE } from "@/lib/structured-editor-fixture";
 import {
   getDefaultContentModeForSite,
   getSiteConfig,
@@ -1061,32 +1060,6 @@ export default function PostEditor({ mode, postId, defaultSiteId }: PostEditorPr
                           }}
                         >
                           Apply JSON to editor
-                        </button>
-                        <button
-                          type="button"
-                          className="btn btn-ghost btn-sm"
-                          onClick={() => {
-                            if (
-                              confirm(
-                                "Load the local test fixture into the editor? This does not save to the database. Save as draft if you continue.",
-                              )
-                            ) {
-                              const nextArticle = STRUCTURED_EDITOR_TEST_FIXTURE.article;
-                              setArticle(nextArticle);
-                              setFaqs(STRUCTURED_EDITOR_TEST_FIXTURE.faqs);
-                              setCta(STRUCTURED_EDITOR_TEST_FIXTURE.cta);
-                              setRelatedSlugs(STRUCTURED_EDITOR_TEST_FIXTURE.relatedSlugs);
-                              update("image", STRUCTURED_EDITOR_TEST_FIXTURE.featuredImage.url);
-                              update("imageAlt", STRUCTURED_EDITOR_TEST_FIXTURE.featuredImage.alt);
-                              update("status", "draft");
-                              update(
-                                "structuredContentJson",
-                                JSON.stringify(serializeEditorArticle(nextArticle), null, 2),
-                              );
-                            }
-                          }}
-                        >
-                          Load test fixture
                         </button>
                       </div>
                     </div>
